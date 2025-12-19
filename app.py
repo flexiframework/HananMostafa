@@ -11,27 +11,35 @@ else:
     st.error("المفتاح غير موجود في Secrets!")
     st.stop()
 
-# --- 3. اختيار الموديل (النسخة الكلاسيكية المستقرة) ---
+# --- 3. اختيار الموديل (البحث التلقائي عن الموديل المتاح) ---
 @st.cache_resource
 def load_model():
-    # سنحاول الاتصال بالموديل الأكثر قبولاً في جميع المناطق
     try:
-        # جرب النسخة المستقرة gemini-pro
-        m = genai.GenerativeModel("gemini-pro")
+        # هذه الوظيفة تسأل جوجل: "ما هي الموديلات المتاحة لهذا المفتاح؟"
+        available_models = genai.list_models()
+        valid_models = [m.name for m in available_models if 'generateContent' in m.supported_generation_methods]
+        
+        if not valid_models:
+            return None, "No models found"
+
+        # اختيار أول موديل متاح (غالباً سيكون gemini-1.5-flash أو gemini-pro)
+        selected_model_name = valid_models[0]
+        m = genai.GenerativeModel(selected_model_name)
+        
+        # اختبار أخير
         m.generate_content("Hi", generation_config={"max_output_tokens": 1})
-        return m, "gemini-pro"
-    except Exception:
-        try:
-            # إذا فشل، جرب النسخة 1.0 pro
-            m = genai.GenerativeModel("models/gemini-1.0-pro")
-            m.generate_content("Hi", generation_config={"max_output_tokens": 1})
-            return m, "gemini-1.0-pro"
-        except Exception as e:
-            # طباعة الخطأ الحقيقي للمساعدة في التشخيص
-            st.sidebar.write(f"Error Detail: {e}")
-            return None, None
+        return m, selected_model_name
+    except Exception as e:
+        return None, str(e)
 
 model, final_name = load_model()
+
+# --- 4. واجهة المستخدم ---
+if model:
+    st.sidebar.success(f"✅ متصل بـ {final_name}")
+else:
+    st.sidebar.error("❌ فشل العثور على موديل متاح")
+    st.sidebar.write(f"التفاصيل: {final_name}")load_model()
 
 # --- 4. واجهة المستخدم ---
 if model:
