@@ -7,59 +7,85 @@ import urllib.request
 import urllib.parse
 import streamlit.components.v1 as components
 
-# 1. إعداد الهوية البصرية لـ Flexi Academy
+# 1. إعداد الهوية البصرية لـ Flexi Academy (الألوان والخطوط)
 st.set_page_config(page_title="Flexi Student Portal", layout="wide", page_icon="🎓")
 
 st.markdown("""
     <style>
     /* ألوان Flexi Academy الأساسية */
-    :root { --flexi-blue: #002e5b; --flexi-light-blue: #0056b3; }
-    .main { background-color: #ffffff; }
-    .stSidebar { background-color: #002e5b !important; color: white !important; }
-    .stSidebar [data-testid="stMarkdownContainer"] p { color: white !important; font-weight: bold; }
+    :root { 
+        --flexi-blue: #002e5b; 
+        --flexi-light: #ffffff; 
+    }
     
-    /* تنسيق صندوق الدرس */
+    /* تنسيق القائمة الجانبية لتكون النصوص بيضاء بالكامل */
+    [data-testid="stSidebar"] {
+        background-color: #002e5b !important;
+    }
+    [data-testid="stSidebar"] .stMarkdown p, 
+    [data-testid="stSidebar"] h1, 
+    [data-testid="stSidebar"] h2, 
+    [data-testid="stSidebar"] h3, 
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] .stMetric div {
+        color: white !important;
+    }
+    
+    /* تنسيق خاص للنقاط (Metrics) لتظهر باللون الأبيض */
+    [data-testid="stMetricValue"] {
+        color: white !important;
+        font-weight: bold;
+    }
+    [data-testid="stMetricLabel"] {
+        color: #e0e0e0 !important;
+    }
+
+    /* تنسيق صندوق الدرس في الصفحة الرئيسية */
     .lesson-area { 
         direction: rtl; text-align: right; line-height: 1.8; 
-        padding: 30px; border-left: 8px solid #002e5b; 
+        padding: 30px; border-right: 8px solid #002e5b; 
         background-color: #f8f9fa; border-radius: 10px; 
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        color: #333;
     }
     
-    /* أزرار مخصصة */
     .stButton>button { 
         background-color: #002e5b !important; color: white !important; 
-        border-radius: 20px !important; padding: 10px 25px !important;
-    }
-    
-    @media print {
-        .stButton, .stAudio, section[data-testid="stSidebar"], header, footer, .print-ignore { display: none !important; }
-        .main { width: 100% !important; padding: 0 !important; }
-        .lesson-area { border: none !important; box-shadow: none !important; }
+        border-radius: 10px !important; width: 100%;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. الشعار والبيانات في القائمة الجانبية (بدون أي روابط للمعلم)
+# 2. القائمة الجانبية (Sidebar)
 with st.sidebar:
+    # اللوجو الرسمي
     st.image("https://flexiacademy.com/assets/images/flexi-logo-2021.png", width=180)
     st.markdown("---")
-    st.markdown("### 👤 ملف الطالب")
+    
+    st.markdown("### 👤 بيانات الطالب")
     student_name = st.text_input("اسم الطالب:", value="Flexian Student")
+    
+    st.markdown("### ⚙️ تخصيص الدرس")
     content_format = st.selectbox("نمط العرض:", ["درس تفاعلي", "قصة مصورة (Comic)", "سيناريو فيديو"])
     level = st.selectbox("المستوى الأكاديمي:", ["مبتدئ", "متوسط", "متقدم"])
     language = st.selectbox("اللغة:", ["العربية", "English", "Français", "Deutsch"])
     
     st.divider()
-    # زر الطباعة المطور
-    print_btn = """
-        <script>function printPage() { window.parent.print(); }</script>
-        <button onclick="printPage()" style="width: 100%; background-color: #ffffff; color: #002e5b; padding: 10px; border: 2px solid #ffffff; border-radius: 10px; cursor: pointer; font-weight: bold;">🖨️ طباعة الدرس PDF</button>
-    """
-    components.html(print_btn, height=50)
     
+    # قسم النقاط (سيظهر الآن باللون الأبيض بوضوح)
     if 'score' not in st.session_state: st.session_state.score = 0
-    st.metric("🏆 نقاطك", st.session_state.score)
+    st.metric("🏆 نقاط التميز", st.session_state.score)
+    
+    st.divider()
+    
+    # زر الطباعة بتصميم متوافق مع القائمة
+    print_html = """
+        <script>function printPage() { window.parent.print(); }</script>
+        <button onclick="printPage()" style="
+            width: 100%; background-color: white; color: #002e5b; 
+            padding: 10px; border: none; border-radius: 8px; 
+            cursor: pointer; font-weight: bold;">🖨️ طباعة PDF</button>
+    """
+    components.html(print_html, height=50)
 
 # 3. تهيئة الذكاء الاصطناعي
 if "GEMINI_API_KEY" in st.secrets:
