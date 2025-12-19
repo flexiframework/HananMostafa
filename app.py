@@ -11,8 +11,33 @@ else:
     st.error("المفتاح غير موجود في Secrets!")
     st.stop()
 
-# 3. اختيار الموديل
-model = genai.GenerativeModel("gemini-1.5-flash")
+# --- 3. اختيار الموديل (تعديل ليتناسب مع v1beta) ---
+@st.cache_resource
+def load_model():
+    # سنحاول تجربة الأسماء المختلفة للموديل حتى ينجح أحدها
+    model_names = [
+        "models/gemini-1.5-flash-latest", 
+        "gemini-1.5-flash", 
+        "models/gemini-pro"
+    ]
+    
+    for name in model_names:
+        try:
+            m = genai.GenerativeModel(name)
+            # تجربة حقيقية للتأكد من أن الموديل يدعم generateContent
+            m.generate_content("test", generation_config={"max_output_tokens": 1})
+            return m, name
+        except Exception:
+            continue
+    return None, None
+
+model, final_name = load_model()
+
+# --- 4. واجهة المستخدم ---
+if model:
+    st.sidebar.success(f"✅ متصل بـ {final_name}")
+else:
+    st.sidebar.error("❌ الموديل غير مدعوم في منطقتك أو حسابك")
 
 # 4. واجهة المستخدم
 st.title("🌟 معلم Flexy الذكي")
