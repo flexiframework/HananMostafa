@@ -12,18 +12,14 @@ st.markdown("""
     <style>
     [data-testid="stSidebarNav"] {display: none !important;}
     :root { --flexi-blue: #002e5b; }
-    
-    /* Left to Right Direction for English */
     .main { direction: ltr; text-align: left; }
     [data-testid="stSidebar"] { background-color: #002e5b !important; }
     [data-testid="stSidebar"] * { color: white !important; }
-    
     .lesson-area { 
         direction: ltr; text-align: left; line-height: 1.6; 
         padding: 30px; border-left: 8px solid #002e5b; 
         background-color: #f8f9fa; border-radius: 10px; color: #333;
     }
-    
     .stButton>button { 
         background-color: #002e5b !important; color: white !important; 
         border-radius: 10px !important; width: 100%; font-weight: bold;
@@ -31,10 +27,19 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. Get Data from URL
+# 2. Get Data from URL & Define Variable Safely
 query_params = st.query_params
 links_context = query_params.get("links", "")
 topic_context = query_params.get("topic", "")
+
+# Initializing target_topic to avoid NameError
+target_topic = ""
+if links_context:
+    target_topic = f"Analyze and explain these links: {links_context}"
+elif topic_context:
+    target_topic = topic_context
+else:
+    target_topic = st.session_state.get('teacher_content', "")
 
 # 3. Sidebar (English Version)
 with st.sidebar:
@@ -55,27 +60,59 @@ with st.sidebar:
         <button onclick="printPage()" style="width: 100%; background-color: white; color: #002e5b; padding: 10px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">🖨️ Print to PDF</button>
     """, height=50)
 
-if st.button("Start Lesson Now ✨"):
-    with st.spinner("Flexy AI is analyzing the content for you..."):
-        prompt = f"""
-        You are an expert tutor at Flexi Academy. Explain this content: {target_topic}.
-        Target: Student prefers {learning_style} style at {level} level.
-        Format: {content_format}. Language: English.
-        Instructions: 
-        1. Use [[Image Description]] for visual aids.
-        2. End with 3 True/False questions: TF_START Q: | A: TF_END.
-        """
-        try:
-            # Using the cached function here
-            lesson_text = get_ai_response(prompt)
-            st.session_state.lesson_en = lesson_text
-            
-            # Generate Audio
-            tts = gTTS(text=lesson_text[:500], lang='en')
-            tts.save("voice_en.mp3")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Error: {e}")
+# 4. AI Engine Logic (Improved Model Selection & Caching)
+if "GEMINI_API_KEY" in st.secrets:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+else:
+    st.error("API Key Missing!")
+    st.stop()
+
+@st.cache_resource
+def get_model():
+    try:
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        for m_name in available_models:
+            if 'gemini-1.5-flash' in m_name:
+                return genai.GenerativeModel(m_name)
+        return genai.GenerativeModel(available_models[0])
+    except:
+        return genai.GenerativeModel('gemini-1.5-flash')
+
+# Function to save results to cache to prevent Quota Exceeded (429)
+@st.cache_data(ttl=3600)
+def get_ai_response(prompt_text):
+    model = get_model()
+    response = model.generate_content(prompt_text)
+    return response.text
+
+st.title("🎓 Flexy Smart Assistant")
+
+if not target_topic:
+    st.warning("Waiting for lesson data from Moodle...")
+else:
+    st.info(f"Context: {target_topic[:100]}...")
+    if st.button("Start Lesson Now ✨"):
+        with st.spinner("Flexy AI is analyzing the content for you..."):
+            prompt = f"""
+            You are an expert tutor at Flexi Academy. Explain this content: {target_topic}.
+            Target: Student prefers {learning_style} style at {level} level.
+            Format: {content_format}. Language: English.
+            Instructions: 
+            1. Use [[Image Description]] for visual aids.
+            2. End with 3 True/False questions: TF_START Q: | A: TF_END.
+            """
+            try:
+                # Use the cached function
+                lesson_text = get_ai_response(prompt)
+                st.session_state.lesson_en = lesson_text
+                
+                # Generate Audio
+                clean_text = re.sub(r'\[\[.*?\]\]|TF_START.*?TF_END', '', lesson_text)
+                tts = gTTS(text=clean_text[:500], lang='en')
+                tts.save("voice_en.mp3")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
 
 # 5. Display Content
 if st.session_state.get('lesson_en'):
