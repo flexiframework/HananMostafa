@@ -39,6 +39,12 @@ if model:
     st.sidebar.success(f"✅ متصل بـ {final_name}")
 else:
     st.sidebar.error("❌ فشل العثور على موديل متاح")
+    st.sidebar.write(f"التفاصيل: {final_name}")
+# --- 4. واجهة المستخدم ---
+if model:
+    st.sidebar.success(f"✅ متصل بـ {final_name}")
+else:
+    st.sidebar.error("❌ فشل العثور على موديل متاح")
     st.sidebar.write(f"التفاصيل: {final_name}")load_model()
 
 # --- 4. واجهة المستخدم ---
