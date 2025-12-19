@@ -11,58 +11,43 @@ else:
     st.error("المفتاح غير موجود في Secrets!")
     st.stop()
 
-# --- 3. اختيار الموديل (البحث التلقائي عن الموديل المتاح) ---
+# 3. اختيار الموديل (البحث التلقائي)
 @st.cache_resource
 def load_model():
     try:
-        # هذه الوظيفة تسأل جوجل: "ما هي الموديلات المتاحة لهذا المفتاح؟"
+        # البحث عن الموديلات المتاحة
         available_models = genai.list_models()
         valid_models = [m.name for m in available_models if 'generateContent' in m.supported_generation_methods]
         
         if not valid_models:
             return None, "No models found"
 
-        # اختيار أول موديل متاح (غالباً سيكون gemini-1.5-flash أو gemini-pro)
-        selected_model_name = valid_models[0]
-        m = genai.GenerativeModel(selected_model_name)
-        
-        # اختبار أخير
+        # اختيار الموديل الأول المتاح وتجربته
+        selected_name = valid_models[0]
+        m = genai.GenerativeModel(selected_name)
         m.generate_content("Hi", generation_config={"max_output_tokens": 1})
-        return m, selected_model_name
+        return m, selected_name
     except Exception as e:
         return None, str(e)
 
+# تشغيل وظيفة التحميل
 model, final_name = load_model()
-
-# --- 4. واجهة المستخدم ---
-if model:
-    st.sidebar.success(f"✅ متصل بـ {final_name}")
-else:
-    st.sidebar.error("❌ فشل العثور على موديل متاح")
-    st.sidebar.write(f"التفاصيل: {final_name}")
-# --- 4. واجهة المستخدم ---
-if model:
-    st.sidebar.success(f"✅ متصل بـ {final_name}")
-else:
-    st.sidebar.error("❌ فشل العثور على موديل متاح")
-    st.sidebar.write(f"التفاصيل: {final_name}")load_model()
-
-# --- 4. واجهة المستخدم ---
-if model:
-    st.sidebar.success(f"✅ متصل بـ {final_name}")
-else:
-    st.sidebar.error("❌ الموديل غير مدعوم في منطقتك أو حسابك")
 
 # 4. واجهة المستخدم
 st.title("🌟 معلم Flexy الذكي")
-st.sidebar.success("✅ متصل وجاهز للعمل")
+
+if model:
+    st.sidebar.success(f"✅ متصل بـ {final_name}")
+else:
+    st.sidebar.error("❌ فشل العثور على موديل")
+    st.sidebar.write(f"التفاصيل: {final_name}")
 
 topic = st.text_area("ماذا تريد أن تتعلم؟")
 if st.button("ابدأ 🚀"):
-    if topic:
+    if topic and model:
         with st.spinner("جاري التحضير..."):
             try:
                 response = model.generate_content(f"اشرح باختصار عن {topic}")
                 st.write(response.text)
             except Exception as e:
-                st.error(f"حدث خطأ: {e}")
+                st.error(f"حدث خطأ أثناء التوليد: {e}")
