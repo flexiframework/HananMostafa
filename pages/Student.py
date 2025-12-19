@@ -7,159 +7,124 @@ import urllib.request
 import urllib.parse
 import streamlit.components.v1 as components
 
-# 1. إعداد الصفحة وتنسيق الطباعة (CSS)
-st.set_page_config(page_title="رحلة الطالب الذكية", layout="wide", page_icon="🎓")
+# 1. إعداد الهوية البصرية لـ Flexi Academy
+st.set_page_config(page_title="Flexi Student Portal", layout="wide", page_icon="🎓")
 
 st.markdown("""
     <style>
-    /* تنسيق المحتوى ليكون جميلاً */
-    .lesson-area { direction: rtl; text-align: right; line-height: 1.8; }
+    /* ألوان Flexi Academy الأساسية */
+    :root { --flexi-blue: #002e5b; --flexi-light-blue: #0056b3; }
+    .main { background-color: #ffffff; }
+    .stSidebar { background-color: #002e5b !important; color: white !important; }
+    .stSidebar [data-testid="stMarkdownContainer"] p { color: white !important; font-weight: bold; }
     
-    /* إخفاء العناصر غير الضرورية عند الطباعة */
+    /* تنسيق صندوق الدرس */
+    .lesson-area { 
+        direction: rtl; text-align: right; line-height: 1.8; 
+        padding: 30px; border-left: 8px solid #002e5b; 
+        background-color: #f8f9fa; border-radius: 10px; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    /* أزرار مخصصة */
+    .stButton>button { 
+        background-color: #002e5b !important; color: white !important; 
+        border-radius: 20px !important; padding: 10px 25px !important;
+    }
+    
     @media print {
-        .stButton, .stAudio, section[data-testid="stSidebar"], header, footer, .stRadio, .print-ignore {
-            display: none !important;
-        }
+        .stButton, .stAudio, section[data-testid="stSidebar"], header, footer, .print-ignore { display: none !important; }
         .main { width: 100% !important; padding: 0 !important; }
-        .lesson-area { border: none !important; background: white !important; color: black !important; }
+        .lesson-area { border: none !important; box-shadow: none !important; }
     }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. تهيئة الموديل بشكل ديناميكي (تجنب خطأ 404)
+# 2. الشعار والبيانات في القائمة الجانبية (بدون أي روابط للمعلم)
+with st.sidebar:
+    st.image("https://flexiacademy.com/assets/images/flexi-logo-2021.png", width=180)
+    st.markdown("---")
+    st.markdown("### 👤 ملف الطالب")
+    student_name = st.text_input("اسم الطالب:", value="Flexian Student")
+    content_format = st.selectbox("نمط العرض:", ["درس تفاعلي", "قصة مصورة (Comic)", "سيناريو فيديو"])
+    level = st.selectbox("المستوى الأكاديمي:", ["مبتدئ", "متوسط", "متقدم"])
+    language = st.selectbox("اللغة:", ["العربية", "English", "Français", "Deutsch"])
+    
+    st.divider()
+    # زر الطباعة المطور
+    print_btn = """
+        <script>function printPage() { window.parent.print(); }</script>
+        <button onclick="printPage()" style="width: 100%; background-color: #ffffff; color: #002e5b; padding: 10px; border: 2px solid #ffffff; border-radius: 10px; cursor: pointer; font-weight: bold;">🖨️ طباعة الدرس PDF</button>
+    """
+    components.html(print_btn, height=50)
+    
+    if 'score' not in st.session_state: st.session_state.score = 0
+    st.metric("🏆 نقاطك", st.session_state.score)
+
+# 3. تهيئة الذكاء الاصطناعي
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
-    st.error("المفتاح مفقود في إعدادات Secrets!")
+    st.error("مفتاح API غير متوفر!")
     st.stop()
 
 @st.cache_resource
-def load_dynamic_model():
+def get_model():
     try:
         models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        return genai.GenerativeModel(models[0]) if models else None
+        return genai.GenerativeModel(models[0])
     except: return None
 
-model_engine = load_dynamic_model()
+model = get_model()
 
-# 3. واجهة الطالب الإحترافية (القائمة الجانبية)
-with st.sidebar:
-    st.header("👤 ملف الطالب الشخصي")
-    student_name = st.text_input("اسم الطالب:", value="طالب ذكي")
-    
-    st.subheader("⚙️ إعدادات الدرس")
-    content_format = st.selectbox("شكل الدرس:", ["درس تفاعلي", "قصة مصورة (Comic Style)", "سيناريو فيديو قصير"])
-    level = st.selectbox("المستوى الأكاديمي:", ["مبتدئ", "متوسط", "متقدم"])
-    age = st.slider("عمر الطالب:", 5, 20, 12)
-    learning_style = st.radio("نمط التعلم:", ["بصري (صور)", "سمعي (فيديو وصوت)", "حركي (تجارب ومشروعات)"])
-    language = st.selectbox("لغة المحتوى:", ["العربية", "English", "Français", "Deutsch"])
-    
-    st.divider()
-    # زر الطباعة المطور (JavaScript)
-    st.markdown("### 🖨️ أدوات الحفظ")
-    print_btn_html = """
-        <script>function printPage() { window.parent.print(); }</script>
-        <button onclick="printPage()" style="width: 100%; background-color: #1a73e8; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">🖨️ حفظ كـ PDF / طباعة</button>
-    """
-    components.html(print_btn_html, height=50)
-    
-    st.divider()
-    if 'score' not in st.session_state: st.session_state.score = 0
-    st.metric("🏆 نقاط التميز", st.session_state.score)
-    if model_engine: st.caption(f"🤖 الموديل النشط: {model_engine.model_name.split('/')[-1]}")
-
-# 4. وظيفة تنظيف النص للصوت (بدون رموز أو إيموجي)
-def clean_for_audio(text):
-    # إزالة الإيموجي والرموز وعلامات الترقيم لقراءة واضحة
-    clean = re.sub(r'[^\w\s\u0600-\u06FF]', ' ', text)
-    return " ".join(clean.split())
-
-# 5. استرجاع درس المعلم والإنتاج
+# 4. عرض المحتوى
 teacher_topic = st.session_state.get('teacher_content', "")
 
-st.title(f"مرحباً بك يا {student_name}! 🚀")
+st.markdown(f"## مرحباً بك في بوابة Flexi Academy ✨")
 
 if not teacher_topic:
-    st.warning("👋 بانتظار المعلم ليقوم بتحديد موضوع الدرس من صفحة Teacher.")
+    st.warning("بانتظار المعلم لرفع المادة العلمية... يرجى تحديث الصفحة لاحقاً.")
 else:
-    st.info(f"📌 الموضوع الحالي: **{teacher_topic}**")
+    st.success(f"📍 الدرس الحالي: {teacher_topic}")
     
-    if st.button("توليد درسي المخصص الآن ✨"):
-        with st.spinner("جاري ابتكار محتواك المخصص..."):
-            prompt = f"""
-            أنت معلم مبدع. اشرح موضوع: {teacher_topic}.
-            الهدف: تحويل الدرس إلى '{content_format}'.
-            المتطلبات:
-            1. اللغة: {language}. 2. العمر: {age}. 3. المستوى: {level}. 4. النمط: {learning_style}.
-            5. التنسيق: 
-               - استخدم [[English Description]] لوصف الصور.
-               - أضف 3 أسئلة صح وخطأ في النهاية تماماً بهذا الشكل:
-                 TF_START
-                 Q: [السؤال] | A: [True أو False]
-                 TF_END
-            """
+    if st.button("توليد المحتوى التعليمي 🚀"):
+        with st.spinner("جاري التجهيز بناءً على هوية Flexi Academy..."):
+            prompt = f"أنت معلم في Flexi Academy. اشرح {teacher_topic} لـ {student_name}. اللغة: {language}. المستوى: {level}. النمط: {content_format}. أضف [[Visual]] للصور و 3 أسئلة TF_START Q: | A: TF_END في النهاية."
             try:
-                response = model_engine.generate_content(prompt)
+                response = model.generate_content(prompt)
                 st.session_state.lesson_data = response.text
                 
-                # توليد الصوت المنظف
-                lang_codes = {'العربية': 'ar', 'English': 'en', 'Français': 'fr', 'Deutsch': 'de'}
-                pure_text = re.sub(r'\[\[.*?\]\]|TF_START.*?TF_END', '', response.text, flags=re.DOTALL)
-                tts_text = clean_for_audio(pure_text[:500])
-                tts = gTTS(text=tts_text, lang=lang_codes[language])
+                # توليد الصوت
+                clean_txt = re.sub(r'[^\w\s\u0600-\u06FF]', ' ', re.sub(r'\[\[.*?\]\]|TF_START.*?TF_END', '', response.text, flags=re.DOTALL))
+                tts = gTTS(text=clean_txt[:500], lang={'العربية': 'ar', 'English': 'en', 'Français': 'fr', 'Deutsch': 'de'}[language])
                 tts.save("voice.mp3")
                 st.rerun()
-            except Exception as e:
-                st.error(f"حدث خطأ: {e}")
+            except Exception as e: st.error(f"خطأ: {e}")
 
-    # 6. عرض المحتوى الناتج
     if st.session_state.get('lesson_data'):
-        content = st.session_state.lesson_data
-        
-        # عرض مشغل الصوت
+        data = st.session_state.lesson_data
         if os.path.exists("voice.mp3"): st.audio("voice.mp3")
-
-        # معالجة الصور
-        main_lesson = content.split("TF_START")[0]
-        images = re.findall(r'\[\[(.*?)\]\]', main_lesson)
-        if images:
-            if "قصة مصورة" in content_format:
-                cols = st.columns(len(images[:3]))
-                for i, img_desc in enumerate(images[:3]):
-                    with cols[i]: st.image(f"https://pollinations.ai/p/{img_desc.replace(' ', '%20')}?width=400&height=400&model=flux", caption=f"مشهد {i+1}")
-            else:
-                st.image(f"https://pollinations.ai/p/{images[0].replace(' ', '%20')}?width=1000&height=400&model=flux")
-
-        # عرض نص الدرس
-        dir_css = "rtl" if language == "العربية" else "ltr"
-        st.markdown(f'<div class="lesson-area" style="direction: {dir_css}; background: #ffffff; padding: 25px; border-radius: 15px; border: 1px solid #ddd;">{main_lesson.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
-
-        # 7. قسم فيديوهات يوتيوب (للمتعلم السمعي)
-        if "سمعي" in learning_style:
+        
+        # الصور
+        imgs = re.findall(r'\[\[(.*?)\]\]', data)
+        if imgs: st.image(f"https://pollinations.ai/p/{imgs[0].replace(' ', '%20')}?width=1000&height=400&model=flux")
+        
+        # النص
+        st.markdown(f'<div class="lesson-area">{data.split("TF_START")[0].replace("\n", "<br>")}</div>', unsafe_allow_html=True)
+        
+        # الأسئلة
+        if "TF_START" in data:
             st.divider()
-            st.subheader("📺 فيديو مقترح من YouTube")
-            search_query = urllib.parse.quote(f"{teacher_topic} {language} educational")
-            html = urllib.request.urlopen(f"https://www.youtube.com/results?search_query={search_query}").read().decode()
-            v_ids = re.findall(r"watch\?v=(\S{11})", html)
-            if v_ids: st.video(f"https://www.youtube.com/watch?v={v_ids[0]}")
-
-        # 8. قسم أسئلة صح وخطأ التفاعلية
-        if "TF_START" in content:
-            st.divider()
-            st.subheader("✅ اختبار ذكاء سريع (صح أم خطأ)")
+            st.subheader("🏆 اختبار التميز من Flexi")
             try:
-                tf_block = re.search(r'TF_START(.*?)TF_END', content, re.DOTALL).group(1)
+                tf_block = re.search(r'TF_START(.*?)TF_END', data, re.DOTALL).group(1)
                 for i, line in enumerate([l for l in tf_block.strip().split("\n") if "|" in l]):
-                    q_text, q_ans = line.split("|")
-                    st.write(f"**س{i+1}: {q_text.replace('Q:', '').strip()}**")
-                    user_choice = st.radio("إجابتك:", ["صح ✅", "خطأ ❌"], key=f"user_q_{i}")
-                    
-                    if st.button(f"تحقق من إجابة {i+1}", key=f"check_{i}"):
-                        is_correct = (user_choice == "صح ✅" and "True" in q_ans) or (user_choice == "خطأ ❌" and "False" in q_ans)
-                        if is_correct:
-                            st.success("إجابة صحيحة! استحققت الكأس 🏆")
+                    q, a = line.split("|")
+                    ans = st.radio(f"{q.replace('Q:', '').strip()}", ["صح ✅", "خطأ ❌"], key=f"q_{i}")
+                    if st.button(f"تحقق {i+1}", key=f"b_{i}"):
+                        if (ans == "صح ✅" and "True" in a) or (ans == "خطأ ❌" and "False" in a):
+                            st.success("إجابة صحيحة! 🏆")
                             st.balloons()
-                            st.session_state.score += 5
-                        else:
-                            st.error("إجابة خاطئة، ركز جيداً في المرة القادمة!")
+                            st.session_state.score += 10
+                        else: st.error("حاول مجدداً!")
             except: pass
