@@ -55,7 +55,7 @@ with st.sidebar:
         <button onclick="printPage()" style="width: 100%; background-color: white; color: #002e5b; padding: 10px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">🖨️ Print to PDF</button>
     """, height=50)
 
-# 4. AI Engine Logic (Flexible Model Selection)
+# 4. AI Engine Logic (Stabilized & Cached)
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
@@ -64,40 +64,27 @@ else:
 
 @st.cache_resource
 def get_model():
-    for m in genai.list_models():
-        if 'generateContent' in m.supported_generation_methods and '1.5-flash' in m.name:
-            return genai.GenerativeModel(m.name)
-    return genai.GenerativeModel('gemini-pro')
+    # محاولة ذكية للبحث عن الموديل المتاح لتجنب خطأ 404
+    try:
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        # نبحث عن 1.5-flash أولاً
+        for m_name in available_models:
+            if '1.5-flash' in m_name:
+                return genai.GenerativeModel(m_name)
+        # إذا لم يجده نأخذ أول موديل متاح
+        return genai.GenerativeModel(available_models[0])
+    except:
+        # حل أخير في حال فشل البحث
+        return genai.GenerativeModel('gemini-pro')
+
+# أضفنا هذه الدالة لعمل Caching ومنع خطأ 429 (Quota)
+@st.cache_data(ttl=3600)
+def generate_lesson_cached(prompt_text):
+    temp_model = get_model()
+    response = temp_model.generate_content(prompt_text)
+    return response.text
 
 model = get_model()
-
-# Content Determination
-target_topic = links_context if links_context else topic_context
-
-st.title("🎓 Flexy Smart Assistant")
-
-if not target_topic:
-    st.warning("Waiting for lesson data from Moodle...")
-else:
-    if st.button("Start Lesson Now ✨"):
-        with st.spinner("Flexy AI is analyzing the content for you..."):
-            prompt = f"""
-            You are an expert tutor at Flexi Academy. Explain this content: {target_topic}.
-            Target: Student prefers {learning_style} style at {level} level.
-            Format: {content_format}. Language: English.
-            Instructions: 
-            1. Use [[Image Description]] for visual aids.
-            2. End with 3 True/False questions: TF_START Q: | A: TF_END.
-            """
-            try:
-                response = model.generate_content(prompt)
-                st.session_state.lesson_en = response.text
-                # Generate Audio (English)
-                tts = gTTS(text=response.text[:500], lang='en')
-                tts.save("voice_en.mp3")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error: {e}")
 
 # 5. Display Content
 if st.session_state.get('lesson_en'):
