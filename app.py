@@ -11,25 +11,25 @@ else:
     st.error("المفتاح غير موجود في Secrets!")
     st.stop()
 
-# --- 3. اختيار الموديل (تعديل ليتناسب مع v1beta) ---
+# --- 3. اختيار الموديل (النسخة الكلاسيكية المستقرة) ---
 @st.cache_resource
 def load_model():
-    # سنحاول تجربة الأسماء المختلفة للموديل حتى ينجح أحدها
-    model_names = [
-        "models/gemini-1.5-flash-latest", 
-        "gemini-1.5-flash", 
-        "models/gemini-pro"
-    ]
-    
-    for name in model_names:
+    # سنحاول الاتصال بالموديل الأكثر قبولاً في جميع المناطق
+    try:
+        # جرب النسخة المستقرة gemini-pro
+        m = genai.GenerativeModel("gemini-pro")
+        m.generate_content("Hi", generation_config={"max_output_tokens": 1})
+        return m, "gemini-pro"
+    except Exception:
         try:
-            m = genai.GenerativeModel(name)
-            # تجربة حقيقية للتأكد من أن الموديل يدعم generateContent
-            m.generate_content("test", generation_config={"max_output_tokens": 1})
-            return m, name
-        except Exception:
-            continue
-    return None, None
+            # إذا فشل، جرب النسخة 1.0 pro
+            m = genai.GenerativeModel("models/gemini-1.0-pro")
+            m.generate_content("Hi", generation_config={"max_output_tokens": 1})
+            return m, "gemini-1.0-pro"
+        except Exception as e:
+            # طباعة الخطأ الحقيقي للمساعدة في التشخيص
+            st.sidebar.write(f"Error Detail: {e}")
+            return None, None
 
 model, final_name = load_model()
 
