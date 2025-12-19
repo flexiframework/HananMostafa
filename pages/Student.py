@@ -73,14 +73,31 @@ with st.sidebar:
         <button onclick="printPage()" style="width: 100%; background-color: white; color: #002e5b; padding: 10px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">🖨️ طباعة الدرس PDF</button>
     """, height=50)
 
-# 4. محرك الذكاء الاصطناعي (Gemini)
+# 4. محرك الذكاء الاصطناعي (تعديل لضمان اختيار الموديل المتاح)
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
-    st.error("مفتاح API مفقود في الإعدادات!")
+    st.error("مفتاح API مفقود!")
     st.stop()
 
-model = genai.GenerativeModel('gemini-1.5-flash')
+# دالة لاختيار الموديل المناسب تلقائياً لتجنب خطأ 404
+@st.cache_resource
+def get_available_model():
+    try:
+        # محاولة البحث عن الموديلات المتاحة في حسابك
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                # نفضل فلاش إذا وجد، وإلا نأخذ أول موديل متاح
+                if 'gemini-1.5-flash' in m.name:
+                    return genai.GenerativeModel(m.name)
+        # إذا لم يجد فلاش، يأخذ الموديل الافتراضي الأول
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        return genai.GenerativeModel(available_models[0])
+    except Exception as e:
+        # حل احتياطي أخير في حال فشل القائمة
+        return genai.GenerativeModel('gemini-pro')
+
+model = get_available_model()
 
 # تحديد المحتوى المستهدف
 target_topic = ""
