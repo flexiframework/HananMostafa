@@ -4,57 +4,58 @@ import re
 import os
 from gtts import gTTS
 
-# 1. إعدادات الصفحة واللغة (من اليسار لليمين)
+# 1. Page Config (Force LTR for English)
 st.set_page_config(page_title="Flexi AI Tutor - EN", layout="wide")
-st.markdown("""<style>.main { direction: ltr; text-align: left; }</style>""", unsafe_allow_html=True)
+st.markdown('<style>.main {direction: ltr; text-align: left;}</style>', unsafe_allow_html=True)
 
-# 2. جلب البيانات من الرابط
-query_params = st.query_params
-links_context = query_params.get("links", "")
-topic_context = query_params.get("topic", "")
-target_topic = links_context if links_context else topic_context
-
-# 3. إعداد محرك الذكاء الاصطناعي
+# 2. API Setup
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
-    st.error("API Key Missing!")
+    st.error("Missing API Key in Secrets!")
     st.stop()
 
-# دالة اختيار الموديل (تم تبسيطها جداً لتجنب خطأ 404)
+# 3. Smart Model Selection (Prevents 404 Error)
 @st.cache_resource
-def get_model():
-    return genai.GenerativeModel('gemini-1.5-flash')
+def get_safe_model():
+    try:
+        # البحث عن أي موديل متاح في حسابك بدلاً من كتابة الاسم يدوياً
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                # نفضل فلاش 1.5 إذا وجده، وإلا سيأخذ أول واحد يعمل
+                if '1.5-flash' in m.name:
+                    return genai.GenerativeModel(m.name)
+        return genai.GenerativeModel('gemini-pro')
+    except:
+        # إذا فشل البحث، نستخدم الاسم المختصر الذي يقبله النظام دائماً
+        return genai.GenerativeModel('gemini-pro')
 
-# دالة حفظ الإجابات (تمنع خطأ 429)
+# 4. Caching Response (Prevents 429 Error)
 @st.cache_data(ttl=3600)
-def get_ai_response(prompt_text):
-    model = get_model()
-    response = model.generate_content(prompt_text)
+def get_lesson_content(topic):
+    model = get_safe_model()
+    response = model.generate_content(f"Explain this lesson simply in English: {topic}")
     return response.text
 
-# 4. واجهة التطبيق
+# 5. UI Logic
 st.title("🎓 Flexy Smart Assistant (EN)")
 
-if not target_topic:
-    st.warning("Waiting for lesson content from Moodle...")
+# جلب البيانات من الموودل
+query_params = st.query_params
+topic = query_params.get("topic", "") or query_params.get("links", "")
+
+if not topic:
+    st.warning("Please open this page from Moodle context.")
 else:
     if st.button("Start Lesson Now ✨"):
-        with st.spinner("Flexy is thinking..."):
-            prompt = f"Explain this lesson in simple English: {target_topic}. Format: Interactive Lesson. Level: Intermediate. Language: English. Please end with 3 True/False questions."
+        with st.spinner("Flexy is preparing your lesson..."):
             try:
-                # طلب الإجابة
-                result = get_ai_response(prompt)
-                st.session_state.lesson_en = result
-                # توليد صوت
-                tts = gTTS(text=result[:500], lang='en')
-                tts.save("voice_en.mp3")
+                res = get_lesson_content(topic)
+                st.session_state.lesson_en = res
                 st.rerun()
             except Exception as e:
-                st.error(f"Error: {str(e)}")
+                st.error(f"Technical error: {str(e)}")
 
-# 5. عرض الدرس
-if st.session_state.get('lesson_en'):
-    res = st.session_state.lesson_en
-    if os.path.exists("voice_en.mp3"): st.audio("voice_en.mp3")
-    st.markdown(f'<div style="text-align:left; direction:ltr; padding:20px; background:#f9f9f9; border-radius:10px;">{res.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
+# عرض المحتوى
+if 'lesson_en' in st.session_state:
+    st.markdown(f'<div style="background:#f0f2f6; padding:25px; border-radius:15px; border-left: 5px solid #002e5b;">{st.session_state.lesson_en.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
