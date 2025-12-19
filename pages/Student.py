@@ -6,10 +6,34 @@ from gtts import gTTS
 import urllib.request
 import urllib.parse
 
-# 1. إعداد الصفحة
+# 1. إعداد الصفحة مع دعم التنسيق للطباعة
 st.set_page_config(page_title="رحلة الطالب الذكية", layout="wide", page_icon="🎓")
 
-# 2. الربط مع Gemini واختيار الموديل تلقائياً
+# تنسيق CSS خاص لإخفاء العناصر غير الضرورية عند الطباعة
+st.markdown("""
+    <style>
+    @media print {
+        .stButton, .stAudio, section[data-testid="stSidebar"], header, footer {
+            display: none !important;
+        }
+        .main {
+            width: 100% !important;
+            padding: 0 !important;
+        }
+    }
+    .print-btn {
+        background-color: #1a73e8;
+        color: white;
+        padding: 10px 20px;
+        border-radius: 5px;
+        border: none;
+        cursor: pointer;
+        font-weight: bold;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# 2. الربط واختيار الموديل تلقائياً
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
@@ -29,26 +53,30 @@ model_engine = load_model()
 with st.sidebar:
     st.header("👤 ملف الطالب")
     student_name = st.text_input("الاسم:", value="طالب ذكي")
+    
+    # إضافة الخيار الجديد: شكل الدرس
+    content_format = st.selectbox("شكل الدرس المشوق:", [
+        "درس تفاعلي بالصور", 
+        "قصة مصورة (Comic Style)", 
+        "سيناريو فيديو قصير"
+    ])
+    
     level = st.selectbox("المستوى:", ["مبتدئ", "متوسط", "متقدم"])
-    age = st.slider("العمر:", 5, 20, 12)
-    learning_style = st.radio("نمط التعلم:", ["بصري (صور)", "سمعي (فيديو)", "حركي (تجارب)"])
     language = st.selectbox("اللغة:", ["العربية", "English", "Français", "Deutsch"])
     
     st.divider()
+    # زر الطباعة في القائمة الجانبية
+    st.markdown('<button onclick="window.print()" class="print-btn">🖨️ طباعة الدرس (PDF)</button>', unsafe_allow_html=True)
+    
     if 'score' not in st.session_state: st.session_state.score = 0
     st.metric("🏆 نقاط التميز", st.session_state.score)
-    if model_engine:
-        st.caption(f"🤖 الموديل النشط: {model_engine.model_name.split('/')[-1]}")
 
-# 4. معالجة النص للصوت (تنظيف علامات الترقيم والإيموجي)
+# 4. وظيفة تنظيف النص للصوت
 def clean_text_for_speech(text):
-    # إزالة الإيموجي والرموز الخاصة
     text = re.sub(r'[^\w\s\u0600-\u06FF]', ' ', text)
-    # إزالة المسافات الزائدة
-    text = " ".join(text.split())
-    return text
+    return " ".join(text.split())
 
-# 5. استرجاع درس المعلم
+# 5. استرجاع درس المعلم وتوليد المحتوى
 teacher_topic = st.session_state.get('teacher_content', "")
 
 st.title(f"مرحباً بك يا {student_name}! 🚀")
@@ -56,19 +84,18 @@ st.title(f"مرحباً بك يا {student_name}! 🚀")
 if not teacher_topic:
     st.warning("بانتظار المعلم لوضع موضوع الدرس...")
 else:
-    if st.button("توليد درسي الخاص الآن ✨"):
-        with st.spinner("جاري ابتكار درسك المخصص..."):
+    if st.button("توليد درسي المشوق الآن ✨"):
+        with st.spinner("جاري ابتكار المحتوى بشكل ممتع..."):
             prompt = f"""
-            أنت معلم خبير. اشرح موضوع: {teacher_topic}.
-            1. اللغة: {language}. 2. العمر: {age}. 3. المستوى: {level}. 4. النمط: {learning_style}.
-            
-            التنسيق المطلوب:
-            - الشرح: استخدم [[Visual Description]] للصور.
-            - الأسئلة التفاعلية (صح وخطأ): أضف 3 أسئلة في النهاية تماماً بهذا الشكل:
+            أنت معلم مبدع وفنان قصصي. الموضوع: {teacher_topic}.
+            الهدف: تحويل الدرس إلى '{content_format}'.
+            المتطلبات:
+            1. اللغة: {language}. 2. المستوى: {level}.
+            3. إذا كان 'قصة مصورة': قسم المحتوى إلى (مشهد 1، مشهد 2...) مع وصف بصري لكل مشهد [[Visual Description]].
+            4. إذا كان 'سيناريو فيديو': اكتبه كأسلوب (راوٍ، حوار، حركة كاميرا).
+            5. الأسئلة التفاعلية (صح وخطأ): أضف 3 أسئلة في النهاية بصيغة:
               TF_START
-              Q: [نص السؤال هنا] | A: [True أو False]
-              Q: [نص السؤال هنا] | A: [True أو False]
-              Q: [نص السؤال هنا] | A: [True أو False]
+              Q: [السؤال] | A: [True/False]
               TF_END
             """
             try:
@@ -78,51 +105,53 @@ else:
                 # توليد الصوت المنظف
                 lang_map = {'العربية': 'ar', 'English': 'en', 'Français': 'fr', 'Deutsch': 'de'}
                 pure_text = re.sub(r'\[\[.*?\]\]|TF_START.*?TF_END', '', response.text, flags=re.DOTALL)
-                final_audio_text = clean_text_for_speech(pure_text)
-                
-                tts = gTTS(text=final_audio_text[:500], lang=lang_map[language])
+                tts = gTTS(text=clean_text_for_speech(pure_text[:500]), lang=lang_map[language])
                 tts.save("voice.mp3")
                 st.rerun()
             except Exception as e:
-                st.error(f"حدث خطأ: {e}")
+                st.error(f"خطأ: {e}")
 
-    # 6. عرض المحتوى والأسئلة
+    # 6. عرض المحتوى
     if st.session_state.get('lesson_data'):
         content = st.session_state.lesson_data
         
-        # تشغيل الصوت المنظم
+        # 🖨️ زر طباعة إضافي في أعلى الصفحة
+        st.markdown('<div style="text-align: left;"><button onclick="window.print()" class="print-btn">🖨️ طباعة</button></div>', unsafe_allow_html=True)
+        
         if os.path.exists("voice.mp3"): st.audio("voice.mp3")
 
-        # عرض الصور والشرح
+        # معالجة الصور بناءً على النمط المختلق
         main_lesson = content.split("TF_START")[0]
-        img_match = re.search(r'\[\[(.*?)\]\]', main_lesson)
-        if img_match:
-            st.image(f"https://pollinations.ai/p/{img_match.group(1).replace(' ', '%20')}?width=1000&height=400&model=flux")
         
-        direction = "rtl" if language == "العربية" else "ltr"
-        st.markdown(f'<div style="direction: {direction}; text-align: justify; background: #f0f2f6; padding: 20px; border-radius: 10px;">{main_lesson.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
+        # إذا كانت قصة مصورة، سنحاول عرض أكثر من صورة
+        images = re.findall(r'\[\[(.*?)\]\]', main_lesson)
+        if images:
+            if "قصة مصورة" in content_format:
+                cols = st.columns(len(images[:3])) # عرض أول 3 مشاهد في أعمدة
+                for idx, img_desc in enumerate(images[:3]):
+                    with cols[idx]:
+                        st.image(f"https://pollinations.ai/p/{img_desc.replace(' ', '%20')}?width=400&height=400&model=flux", caption=f"مشهد {idx+1}")
+            else:
+                st.image(f"https://pollinations.ai/p/{images[0].replace(' ', '%20')}?width=1000&height=400&model=flux")
 
-        # 7. قسم أسئلة "صح وخطأ" التفاعلية
+        # عرض النص التنسيقي
+        direction = "rtl" if language == "العربية" else "ltr"
+        st.markdown(f'<div class="lesson-area" style="direction: {direction}; background: white; padding: 30px; border: 2px solid #e0e0e0; border-radius: 15px;">{main_lesson.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
+
+        # 7. قسم الأسئلة
         if "TF_START" in content:
             st.divider()
-            st.subheader("✅ اختبار التحدي (صح أم خطأ)")
-            
-            questions_block = re.search(r'TF_START(.*?)TF_END', content, re.DOTALL).group(1)
-            q_lines = [line.strip() for line in questions_block.strip().split("\n") if "|" in line]
-            
-            for i, line in enumerate(q_lines):
-                q_text, q_answer = line.split("|")
-                q_text = q_text.replace("Q:", "").strip()
-                ans_value = q_answer.replace("A:", "").strip() # True or False
-                
-                st.write(f"**{i+1}. {q_text}**")
-                user_ans = st.radio(f"اختر إجابة السؤال {i+1}:", ["صح ✅", "خطأ ❌"], key=f"tf_{i}")
-                
-                if st.button(f"تحقق من السؤال {i+1}", key=f"btn_{i}"):
-                    is_correct = (user_ans == "صح ✅" and ans_value == "True") or (user_ans == "خطأ ❌" and ans_value == "False")
-                    if is_correct:
-                        st.success("إجابة رائعة! استلم كأس التميز: 🏆")
-                        st.session_state.score += 5
-                        st.balloons()
-                    else:
-                        st.error("للأسف، إجابة غير صحيحة. حاول التركيز في القراءة!")
+            st.subheader("✅ تحدي الفهم (صح أم خطأ)")
+            try:
+                questions_block = re.search(r'TF_START(.*?)TF_END', content, re.DOTALL).group(1)
+                for i, line in enumerate([l for l in questions_block.strip().split("\n") if "|" in l]):
+                    q_text, q_ans = line.split("|")
+                    user_ans = st.radio(f"{q_text.strip()}", ["صح ✅", "خطأ ❌"], key=f"tf_{i}")
+                    if st.button(f"تأكيد إجابة {i+1}", key=f"btn_{i}"):
+                        is_correct = (user_ans == "صح ✅" and "True" in q_ans) or (user_ans == "خطأ ❌" and "False" in q_ans)
+                        if is_correct:
+                            st.success("عبقري! إجابة صحيحة 🏆")
+                            st.balloons()
+                            st.session_state.score += 5
+                        else: st.error("حاول مرة أخرى يا بطل!")
+            except: pass
