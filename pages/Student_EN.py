@@ -8,6 +8,7 @@ import streamlit.components.v1 as components
 # 1. Page Config & English Visual Identity
 st.set_page_config(page_title="Flexi AI Tutor - EN", layout="wide", page_icon="🎓")
 
+# CSS to force LTR and style the app
 st.markdown("""
     <style>
     [data-testid="stSidebarNav"] {display: none !important;}
@@ -32,14 +33,11 @@ query_params = st.query_params
 links_context = query_params.get("links", "")
 topic_context = query_params.get("topic", "")
 
-# Initializing target_topic to avoid NameError
 target_topic = ""
 if links_context:
     target_topic = f"Analyze and explain these links: {links_context}"
 elif topic_context:
     target_topic = topic_context
-else:
-    target_topic = st.session_state.get('teacher_content', "")
 
 # 3. Sidebar (English Version)
 with st.sidebar:
@@ -60,7 +58,7 @@ with st.sidebar:
         <button onclick="printPage()" style="width: 100%; background-color: white; color: #002e5b; padding: 10px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">🖨️ Print to PDF</button>
     """, height=50)
 
-# 4. AI Engine Logic (Improved Model Selection & Caching)
+# 4. AI Engine Logic (Final Stable Solution for 404 & 429)
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
@@ -69,28 +67,27 @@ else:
 
 @st.cache_resource
 def get_model():
-    try:
-        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        for m_name in available_models:
-            if 'gemini-1.5-flash' in m_name:
-                return genai.GenerativeModel(m_name)
-        return genai.GenerativeModel(available_models[0])
-    except:
-        return genai.GenerativeModel('gemini-1.5-flash')
+    # Using the full model path to avoid 404
+    return genai.GenerativeModel('models/gemini-1.5-flash')
 
-# Function to save results to cache to prevent Quota Exceeded (429)
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600) # Save response for 1 hour to avoid 429
 def get_ai_response(prompt_text):
-    model = get_model()
-    response = model.generate_content(prompt_text)
-    return response.text
+    try:
+        model = get_model()
+        response = model.generate_content(prompt_text)
+        return response.text
+    except Exception as e:
+        err = str(e)
+        if "429" in err: return "QUOTA_ERROR: AI is busy. Please retry in 1 minute."
+        if "404" in err: return "MODEL_ERROR: AI model not found. Check version."
+        return f"Error: {err}"
 
-st.title("🎓 Flexy Smart Assistant")
+# 5. UI and Lesson Generation
+st.title("🎓 Flexy Smart Assistant (EN)")
 
 if not target_topic:
     st.warning("Waiting for lesson data from Moodle...")
 else:
-    st.info(f"Context: {target_topic[:100]}...")
     if st.button("Start Lesson Now ✨"):
         with st.spinner("Flexy AI is analyzing the content for you..."):
             prompt = f"""
@@ -101,20 +98,18 @@ else:
             1. Use [[Image Description]] for visual aids.
             2. End with 3 True/False questions: TF_START Q: | A: TF_END.
             """
-            try:
-                # Use the cached function
-                lesson_text = get_ai_response(prompt)
-                st.session_state.lesson_en = lesson_text
-                
+            result = get_ai_response(prompt)
+            if "ERROR" in result:
+                st.error(result)
+            else:
+                st.session_state.lesson_en = result
                 # Generate Audio
-                clean_text = re.sub(r'\[\[.*?\]\]|TF_START.*?TF_END', '', lesson_text)
+                clean_text = re.sub(r'\[\[.*?\]\]|TF_START.*?TF_END', '', result)
                 tts = gTTS(text=clean_text[:500], lang='en')
                 tts.save("voice_en.mp3")
                 st.rerun()
-            except Exception as e:
-                st.error(f"Error: {e}")
 
-# 5. Display Content
+# 6. Display Content
 if st.session_state.get('lesson_en'):
     res = st.session_state.lesson_en
     if os.path.exists("voice_en.mp3"): st.audio("voice_en.mp3")
@@ -124,7 +119,8 @@ if st.session_state.get('lesson_en'):
     if imgs: st.image(f"https://pollinations.ai/p/{imgs[0].replace(' ', '%20')}?width=1000&height=400&model=flux")
     
     # Main Lesson Text
-    st.markdown(f'<div class="lesson-area">{res.split("TF_START")[0].replace("\n", "<br>")}</div>', unsafe_allow_html=True)
+    main_text = res.split("TF_START")[0].replace("\n", "<br>")
+    st.markdown(f'<div class="lesson-area">{main_text}</div>', unsafe_allow_html=True)
     
     # Interactive Quiz
     if "TF_START" in res:
